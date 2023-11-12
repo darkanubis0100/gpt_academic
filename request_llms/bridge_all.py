@@ -19,8 +19,8 @@ from .bridge_chatgpt import predict as chatgpt_ui
 from .bridge_chatglm import predict_no_ui_long_connection as chatglm_noui
 from .bridge_chatglm import predict as chatglm_ui
 
-from .bridge_chatglm import predict_no_ui_long_connection as chatglm_noui
-from .bridge_chatglm import predict as chatglm_ui
+from .bridge_chatglm3 import predict_no_ui_long_connection as chatglm3_noui
+from .bridge_chatglm3 import predict as chatglm3_ui
 
 from .bridge_qianfan import predict_no_ui_long_connection as qianfan_noui
 from .bridge_qianfan import predict as qianfan_ui
@@ -56,7 +56,7 @@ if not AZURE_ENDPOINT.endswith('/'): AZURE_ENDPOINT += '/'
 azure_endpoint = AZURE_ENDPOINT + f'openai/deployments/{AZURE_ENGINE}/chat/completions?api-version=2023-05-15'
 # 兼容旧版的配置
 try:
-    API_URL, = get_conf("API_URL")
+    API_URL = get_conf("API_URL")
     if API_URL != "https://api.openai.com/v1/chat/completions": 
         openai_endpoint = API_URL
         print("警告！API_URL配置选项将被弃用，请更换为API_URL_REDIRECT配置")
@@ -94,7 +94,7 @@ model_info = {
         "fn_with_ui": chatgpt_ui,
         "fn_without_ui": chatgpt_noui,
         "endpoint": openai_endpoint,
-        "max_token": 1024*16,
+        "max_token": 16385,
         "tokenizer": tokenizer_gpt35,
         "token_cnt": get_token_num_gpt35,
     },
@@ -112,7 +112,16 @@ model_info = {
         "fn_with_ui": chatgpt_ui,
         "fn_without_ui": chatgpt_noui,
         "endpoint": openai_endpoint,
-        "max_token": 1024 * 16,
+        "max_token": 16385,
+        "tokenizer": tokenizer_gpt35,
+        "token_cnt": get_token_num_gpt35,
+    },
+
+    "gpt-3.5-turbo-1106": {#16k
+        "fn_with_ui": chatgpt_ui,
+        "fn_without_ui": chatgpt_noui,
+        "endpoint": openai_endpoint,
+        "max_token": 16385,
         "tokenizer": tokenizer_gpt35,
         "token_cnt": get_token_num_gpt35,
     },
@@ -131,6 +140,15 @@ model_info = {
         "fn_without_ui": chatgpt_noui,
         "endpoint": openai_endpoint,
         "max_token": 32768,
+        "tokenizer": tokenizer_gpt4,
+        "token_cnt": get_token_num_gpt4,
+    },
+
+    "gpt-4-1106-preview": {
+        "fn_with_ui": chatgpt_ui,
+        "fn_without_ui": chatgpt_noui,
+        "endpoint": openai_endpoint,
+        "max_token": 128000,
         "tokenizer": tokenizer_gpt4,
         "token_cnt": get_token_num_gpt4,
     },
@@ -186,7 +204,7 @@ model_info = {
         "fn_with_ui": chatgpt_ui,
         "fn_without_ui": chatgpt_noui,
         "endpoint": api2d_endpoint,
-        "max_token": 1024*16,
+        "max_token": 16385,
         "tokenizer": tokenizer_gpt35,
         "token_cnt": get_token_num_gpt35,
     },
@@ -205,6 +223,14 @@ model_info = {
         "fn_without_ui": chatglm_noui,
         "endpoint": None,
         "max_token": 1024,
+        "tokenizer": tokenizer_gpt35,
+        "token_cnt": get_token_num_gpt35,
+    },
+    "chatglm3": {
+        "fn_with_ui": chatglm3_ui,
+        "fn_without_ui": chatglm3_noui,
+        "endpoint": None,
+        "max_token": 8192,
         "tokenizer": tokenizer_gpt35,
         "token_cnt": get_token_num_gpt35,
     },
@@ -483,9 +509,25 @@ if "llama2" in AVAIL_LLM_MODELS:   # llama2
         })
     except:
         print(trimmed_format_exc())
+if "zhipuai" in AVAIL_LLM_MODELS:   # zhipuai
+    try:
+        from .bridge_zhipu import predict_no_ui_long_connection as zhipu_noui
+        from .bridge_zhipu import predict as zhipu_ui
+        model_info.update({
+            "zhipuai": {
+                "fn_with_ui": zhipu_ui,
+                "fn_without_ui": zhipu_noui,
+                "endpoint": None,
+                "max_token": 4096,
+                "tokenizer": tokenizer_gpt35,
+                "token_cnt": get_token_num_gpt35,
+            }
+        })
+    except:
+        print(trimmed_format_exc())
 
 # <-- 用于定义和切换多个azure模型 -->
-AZURE_CFG_ARRAY, = get_conf("AZURE_CFG_ARRAY")
+AZURE_CFG_ARRAY = get_conf("AZURE_CFG_ARRAY")
 if len(AZURE_CFG_ARRAY) > 0:
     for azure_model_name, azure_cfg_dict in AZURE_CFG_ARRAY.items():
         # 可能会覆盖之前的配置，但这是意料之中的
