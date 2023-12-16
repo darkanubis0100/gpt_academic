@@ -1,4 +1,4 @@
-from toolbox import update_ui, get_conf, trimmed_format_exc, get_log_folder
+from toolbox import update_ui, get_conf, trimmed_format_exc, get_max_token, Singleton
 import threading
 import os
 import logging
@@ -92,7 +92,7 @@ def request_gpt_model_in_new_thread_with_ui_alive(
                     # 【选择处理】 尝试计算比例，尽可能多地保留文本
                     from toolbox import get_reduce_token_percent
                     p_ratio, n_exceed = get_reduce_token_percent(str(token_exceeded_error))
-                    MAX_TOKEN = 4096
+                    MAX_TOKEN = get_max_token(llm_kwargs)
                     EXCEED_ALLO = 512 + 512 * exceeded_cnt
                     inputs, history = input_clipping(inputs, history, max_token_limit=MAX_TOKEN-EXCEED_ALLO)
                     mutable[0] += f'[Local Message] 警告，文本过长将进行截断，Token溢出数：{n_exceed}。\n\n'
@@ -224,7 +224,7 @@ def request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency(
                     # 【选择处理】 尝试计算比例，尽可能多地保留文本
                     from toolbox import get_reduce_token_percent
                     p_ratio, n_exceed = get_reduce_token_percent(str(token_exceeded_error))
-                    MAX_TOKEN = 4096
+                    MAX_TOKEN = get_max_token(llm_kwargs)
                     EXCEED_ALLO = 512 + 512 * exceeded_cnt
                     inputs, history = input_clipping(inputs, history, max_token_limit=MAX_TOKEN-EXCEED_ALLO)
                     gpt_say += f'[Local Message] 警告，文本过长将进行截断，Token溢出数：{n_exceed}。\n\n'
@@ -631,89 +631,6 @@ def get_files_from_everything(txt, type): # type='.md'
 
 
 
-
-def Singleton(cls):
-    _instance = {}
- 
-    def _singleton(*args, **kargs):
-        if cls not in _instance:
-            _instance[cls] = cls(*args, **kargs)
-        return _instance[cls]
- 
-    return _singleton
-
-
-@Singleton
-class knowledge_archive_interface():
-    def __init__(self) -> None:
-        self.threadLock = threading.Lock()
-        self.current_id = ""
-        self.kai_path = None
-        self.qa_handle = None
-        self.text2vec_large_chinese = None
-
-    def get_chinese_text2vec(self):
-        if self.text2vec_large_chinese is None:
-            # < -------------------预热文本向量化模组--------------- >
-            from toolbox import ProxyNetworkActivate
-            print('Checking Text2vec ...')
-            from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-            with ProxyNetworkActivate('Download_LLM'):    # 临时地激活代理网络
-                self.text2vec_large_chinese = HuggingFaceEmbeddings(model_name="GanymedeNil/text2vec-large-chinese")
-
-        return self.text2vec_large_chinese
-
-
-    def feed_archive(self, file_manifest, id="default"):
-        self.threadLock.acquire()
-        # import uuid
-        self.current_id = id
-        from zh_langchain import construct_vector_store
-        self.qa_handle, self.kai_path = construct_vector_store(   
-            vs_id=self.current_id, 
-            files=file_manifest, 
-            sentence_size=100,
-            history=[],
-            one_conent="",
-            one_content_segmentation="",
-            text2vec = self.get_chinese_text2vec(),
-        )
-        self.threadLock.release()
-
-    def get_current_archive_id(self):
-        return self.current_id
-    
-    def get_loaded_file(self):
-        return self.qa_handle.get_loaded_file()
-
-    def answer_with_archive_by_id(self, txt, id):
-        self.threadLock.acquire()
-        if not self.current_id == id:
-            self.current_id = id
-            from zh_langchain import construct_vector_store
-            self.qa_handle, self.kai_path = construct_vector_store(   
-                vs_id=self.current_id, 
-                files=[], 
-                sentence_size=100,
-                history=[],
-                one_conent="",
-                one_content_segmentation="",
-                text2vec = self.get_chinese_text2vec(),
-            )
-        VECTOR_SEARCH_SCORE_THRESHOLD = 0
-        VECTOR_SEARCH_TOP_K = 4
-        CHUNK_SIZE = 512
-        resp, prompt = self.qa_handle.get_knowledge_based_conent_test(
-            query = txt,
-            vs_path = self.kai_path,
-            score_threshold=VECTOR_SEARCH_SCORE_THRESHOLD,
-            vector_search_top_k=VECTOR_SEARCH_TOP_K, 
-            chunk_conent=True,
-            chunk_size=CHUNK_SIZE,
-            text2vec = self.get_chinese_text2vec(),
-        )
-        self.threadLock.release()
-        return resp, prompt
     
 @Singleton
 class nougat_interface():
