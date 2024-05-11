@@ -568,7 +568,7 @@ class nougat_interface():
         from toolbox import ProxyNetworkActivate
         logging.info(f'正在执行命令 {command}')
         with ProxyNetworkActivate("Nougat_Download"):
-            process = subprocess.Popen(command, shell=True, cwd=cwd, env=os.environ)
+            process = subprocess.Popen(command, shell=False, cwd=cwd, env=os.environ)
         try:
             stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -592,7 +592,8 @@ class nougat_interface():
 
         yield from update_ui_lastest_msg("正在解析论文, 请稍候。进度：正在加载NOUGAT... （提示：首次运行需要花费较长时间下载NOUGAT参数）",
                                          chatbot=chatbot, history=history, delay=0)
-        self.nougat_with_timeout(f'nougat --out "{os.path.abspath(dst)}" "{os.path.abspath(fp)}"', os.getcwd(), timeout=3600)
+        command = ['nougat', '--out', os.path.abspath(dst), os.path.abspath(fp)]
+        self.nougat_with_timeout(command, cwd=os.getcwd(), timeout=3600)
         res = glob.glob(os.path.join(dst,'*.mmd'))
         if len(res) == 0:
             self.threadLock.release()
