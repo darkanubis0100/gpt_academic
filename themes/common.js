@@ -331,6 +331,9 @@ function addCopyButton(botElement, index, is_last_in_arr) {
                 toast_push('正在合成语音 & 自动朗读已开启 (再次点击此按钮可禁用自动朗读)。', 3000);
                 // toast_push('正在合成语音', 3000);
                 const readText = botElement.innerText;
+                prev_chatbot_index = index;
+                prev_text = readText;
+                prev_text_already_pushed = readText;
                 push_text_to_audio(readText);
                 setCookie("js_auto_read_cookie", "True", 365);
             }
@@ -1033,7 +1036,7 @@ async function GptAcademicJavaScriptInit(dark, prompt, live2d, layout, tts) {
 
 
 function reset_conversation(a, b) {
-    console.log("js_code_reset");
+    // console.log("js_code_reset");
     a = btoa(unescape(encodeURIComponent(JSON.stringify(a))));
     setCookie("js_previous_chat_cookie", a, 1);
     gen_restore_btn();
@@ -1173,7 +1176,7 @@ async function on_plugin_exe_complete(fn_name) {
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 //  第 8 部分: TTS语音生成函数
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
+audio_debug = false;
 class AudioPlayer {
     constructor() {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1321,14 +1324,14 @@ function trigger(T, fire) {
 }
 
 
-prev_text = "";
-prev_text_already_pushed = "";
+prev_text = ""; // previous text, this is used to check chat changes
+prev_text_already_pushed = ""; // previous text already pushed to audio, this is used to check where we should continue to play audio
 prev_chatbot_index = -1;
 const delay_live_text_update = trigger(3000, on_live_stream_terminate);
 
 function on_live_stream_terminate(latest_text) {
     // remove `prev_text_already_pushed` from `latest_text`
-    console.log("on_live_stream_terminate", latest_text)
+    if (audio_debug) console.log("on_live_stream_terminate", latest_text);
     remaining_text = latest_text.slice(prev_text_already_pushed.length);
     if ((!isEmptyOrWhitespaceOnly(remaining_text)) && remaining_text.length != 0) {
         prev_text_already_pushed = latest_text;
@@ -1393,19 +1396,19 @@ function process_latest_text_output(text, chatbot_index) {
         delay_live_text_update(text); // in case of no \n or 。 in the text, this timer will finally commit
     }
     else if (chatbot_index == prev_chatbot_index && !is_continue) {
-        console.log('---------------------')
-        console.log('text twisting!')
-        console.log('[new message begin]', 'text', text, 'prev_text_already_pushed', prev_text_already_pushed)
-        console.log('---------------------')
+        if (audio_debug) console.log('---------------------');
+        if (audio_debug) console.log('text twisting!');
+        if (audio_debug) console.log('[new message begin]', 'text', text, 'prev_text_already_pushed', prev_text_already_pushed);
+        if (audio_debug) console.log('---------------------');
         prev_text_already_pushed = "";
         delay_live_text_update(text); // in case of no \n or 。 in the text, this timer will finally commit
     }
     else {
         // on_new_message_begin, we have to clear `prev_text_already_pushed`
-        console.log('---------------------')
-        console.log('new message begin!')
-        console.log('[new message begin]', 'text', text, 'prev_text_already_pushed', prev_text_already_pushed)
-        console.log('---------------------')
+        if (audio_debug) console.log('---------------------');
+        if (audio_debug) console.log('new message begin!');
+        if (audio_debug) console.log('[new message begin]', 'text', text, 'prev_text_already_pushed', prev_text_already_pushed);
+        if (audio_debug) console.log('---------------------');
         prev_text_already_pushed = "";
         process_increased_text(text);
         delay_live_text_update(text); // in case of no \n or 。 in the text, this timer will finally commit
@@ -1433,7 +1436,7 @@ async function push_text_to_audio(text) {
             // Call the async postData function and log the response
             post_text(url, payload, send_index);
             send_index = send_index + 1;
-            console.log(send_index, audio_buf_text)
+            if (audio_debug) console.log(send_index, audio_buf_text);
             // sleep 2 seconds
             if (allow_auto_read_tts_flag) {
                 await delay(3000);
@@ -1450,10 +1453,10 @@ to_be_processed = [];
 async function UpdatePlayQueue(cnt, audio_buf_wave) {
     if (cnt != recv_index) {
         to_be_processed.push([cnt, audio_buf_wave]);
-        console.log('cache', cnt);
+        if (audio_debug) console.log('cache', cnt);
     }
     else {
-        console.log('processing', cnt);
+        if (audio_debug) console.log('processing', cnt);
         recv_index = recv_index + 1;
         if (audio_buf_wave) {
             audioPlayer.enqueueAudio(audio_buf_wave);
@@ -1463,7 +1466,7 @@ async function UpdatePlayQueue(cnt, audio_buf_wave) {
             find_any = false;
             for (i = to_be_processed.length - 1; i >= 0; i--) {
                 if (to_be_processed[i][0] == recv_index) {
-                    console.log('processing cached', recv_index);
+                    if (audio_debug) console.log('processing cached', recv_index);
                     if (to_be_processed[i][1]) {
                         audioPlayer.enqueueAudio(to_be_processed[i][1]);
                     }
@@ -1522,15 +1525,182 @@ async function postData(url = '', data = {}) {
     }
 }
 
+async function generate_menu(guiBase64String, btnName){
+    // assign the button and menu data
+    push_data_to_gradio_component(guiBase64String, "invisible_current_pop_up_plugin_arg", "string");
+    push_data_to_gradio_component(btnName, "invisible_callback_btn_for_plugin_exe", "string");
+
+    // Base64 to dict
+    const stringData = atob(guiBase64String);
+    let guiJsonData = JSON.parse(stringData);
+    let menu = document.getElementById("plugin_arg_menu");
+    gui_args = {}
+    for (const key in guiJsonData) {
+        if (guiJsonData.hasOwnProperty(key)) {
+            const innerJSONString = guiJsonData[key];
+            const decodedObject = JSON.parse(innerJSONString);
+            gui_args[key] = decodedObject;
+        }
+    }
+
+    // 使参数菜单显现
+    push_data_to_gradio_component({
+        visible: true,
+        __type__: 'update'
+    }, "plugin_arg_menu", "obj");
+    hide_all_elem();
+    // 根据 gui_args, 使得对应参数项显现
+    let text_cnt = 0;
+    let dropdown_cnt = 0;
+    // PLUGIN_ARG_MENU
+    for (const key in gui_args) {
+        if (gui_args.hasOwnProperty(key)) {
+
+            ///////////////////////////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////    Textbox   ////////////////////////////////////
+            ///////////////////////////////////////////////////////////////////////////////////////////
+            if (gui_args[key].type=='string'){ // PLUGIN_ARG_MENU
+                const component_name = "plugin_arg_txt_" + text_cnt;
+                push_data_to_gradio_component({
+                    visible: true,
+                    label: gui_args[key].title + "(" + gui_args[key].description +  ")",
+                    // label: gui_args[key].title,
+                    placeholder: gui_args[key].description,
+                    __type__: 'update'
+                }, component_name, "obj");
+                if (key === "main_input"){
+                    // 为了与旧插件兼容，生成菜单时，自动加载输入栏的值
+                    let current_main_input = await get_data_from_gradio_component('user_input_main');
+                    let current_main_input_2 = await get_data_from_gradio_component('user_input_float');
+                    push_data_to_gradio_component(current_main_input + current_main_input_2, component_name, "obj");
+                }
+                else if (key === "advanced_arg"){
+                    // 为了与旧插件兼容，生成菜单时，自动加载旧高级参数输入区的值
+                    let advance_arg_input_legacy = await get_data_from_gradio_component('advance_arg_input_legacy');
+                    push_data_to_gradio_component(advance_arg_input_legacy, component_name, "obj");
+                }
+                else {
+                    push_data_to_gradio_component(gui_args[key].default_value, component_name, "obj");
+                }
+                document.getElementById(component_name).parentNode.parentNode.style.display = '';
+                text_cnt += 1;
+            }
+
+            ///////////////////////////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////    Dropdown   ////////////////////////////////////
+            ///////////////////////////////////////////////////////////////////////////////////////////
+            if (gui_args[key].type=='dropdown'){ // PLUGIN_ARG_MENU
+                const component_name = "plugin_arg_drop_" + dropdown_cnt;
+                push_data_to_gradio_component({
+                    visible: true,
+                    choices: gui_args[key].options,
+                    label: gui_args[key].title + "(" + gui_args[key].description +  ")",
+                    // label: gui_args[key].title,
+                    placeholder: gui_args[key].description,
+                    __type__: 'update'
+                }, component_name, "obj");
+                push_data_to_gradio_component(gui_args[key].default_value, component_name, "obj");
+                document.getElementById(component_name).parentNode.style.display = '';
+                dropdown_cnt += 1;
+            }
 
 
+        }
+    }
+}
 
+async function execute_current_pop_up_plugin(){
+    let guiBase64String = await get_data_from_gradio_component('invisible_current_pop_up_plugin_arg');
+    const stringData = atob(guiBase64String);
+    let guiJsonData = JSON.parse(stringData);
+    gui_args = {}
+    for (const key in guiJsonData) {
+        if (guiJsonData.hasOwnProperty(key)) {
+            const innerJSONString = guiJsonData[key];
+            const decodedObject = JSON.parse(innerJSONString);
+            gui_args[key] = decodedObject;
+        }
+    }
+    // read user confirmed value
+    let text_cnt = 0;
+    for (const key in gui_args) {
+        if (gui_args.hasOwnProperty(key)) {
+            if (gui_args[key].type=='string'){ // PLUGIN_ARG_MENU
+                corrisponding_elem_id = "plugin_arg_txt_"+text_cnt
+                gui_args[key].user_confirmed_value = await get_data_from_gradio_component(corrisponding_elem_id);
+                text_cnt += 1;
+            }
+        }
+    }
+    let dropdown_cnt = 0;
+    for (const key in gui_args) {
+        if (gui_args.hasOwnProperty(key)) {
+            if (gui_args[key].type=='dropdown'){ // PLUGIN_ARG_MENU
+                corrisponding_elem_id = "plugin_arg_drop_"+dropdown_cnt
+                gui_args[key].user_confirmed_value = await get_data_from_gradio_component(corrisponding_elem_id);
+                dropdown_cnt += 1;
+            }
+        }
+    }
+    // close menu
+    push_data_to_gradio_component({
+        visible: false,
+        __type__: 'update'
+    }, "plugin_arg_menu", "obj");
+    hide_all_elem();
 
+    // execute the plugin
+    push_data_to_gradio_component(JSON.stringify(gui_args), "invisible_current_pop_up_plugin_arg_final", "string");
+    document.getElementById("invisible_callback_btn_for_plugin_exe").click();
 
+}
 
+function hide_all_elem(){
+     // PLUGIN_ARG_MENU
+    for (text_cnt = 0; text_cnt < 8; text_cnt++){
+        push_data_to_gradio_component({
+            visible: false,
+            label: "",
+            __type__: 'update'
+        }, "plugin_arg_txt_"+text_cnt, "obj");
+        document.getElementById("plugin_arg_txt_"+text_cnt).parentNode.parentNode.style.display = 'none';
+    }
+    for (dropdown_cnt = 0; dropdown_cnt < 8; dropdown_cnt++){
+        push_data_to_gradio_component({
+            visible: false,
+            choices: [],
+            label: "",
+            __type__: 'update'
+        }, "plugin_arg_drop_"+dropdown_cnt, "obj");
+        document.getElementById("plugin_arg_drop_"+dropdown_cnt).parentNode.style.display = 'none';
+    }
+}
 
+function close_current_pop_up_plugin(){
+     // PLUGIN_ARG_MENU
+    push_data_to_gradio_component({
+        visible: false,
+        __type__: 'update'
+    }, "plugin_arg_menu", "obj");
+    hide_all_elem();
+}
 
-
+// 生成高级插件的选择菜单
+advanced_plugin_init_code_lib = {}
+function register_advanced_plugin_init_code(key, code){
+    advanced_plugin_init_code_lib[key] = code;
+}
+function run_advanced_plugin_launch_code(key){
+    // convert js code string to function
+    generate_menu(advanced_plugin_init_code_lib[key], key);
+}
+function on_flex_button_click(key){
+    if (advanced_plugin_init_code_lib.hasOwnProperty(key)){
+        run_advanced_plugin_launch_code(key);
+    }else{
+        document.getElementById("old_callback_btn_for_plugin_exe").click();
+    }
+}
 
 
 
